@@ -1,32 +1,32 @@
 #define _CRT_SECURE_NO_WARNINGS
 #ifdef _WIN32
-	#define WIN32_LEAN_AND_MEAN
-	#include <windows.h>
-	#include <winsock2.h>
-	#include <ws2tcpip.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 
-	#pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "ws2_32.lib")
 
 #else
-	#include <sys/types.h>
-	#include <sys/socket.h>
-	#include <netinet/in.h>
-	#include <arpa/inet.h>
-	#include <string.h>
-	#include <stdio.h>
-	#include <errno.h>
-	#include <unistd.h>
-	#include <netdb.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <string.h>
+#include <stdio.h>
+#include <errno.h>
+#include <unistd.h>
+#include <netdb.h>
 #endif
 
 
 #include <iostream>
 #include <stdio.h>
 #include <string.h>
+#include <vector>
 using namespace std;
 
-unsigned int ip;
-unsigned port;
+#define MAX_CLI 100
 
 int init()
 {
@@ -85,119 +85,23 @@ void s_close(int s)
 #endif
 }
 
-
-
-
-char* recv_fixed_line(int cs)
-{
-	char* buffer = (char*)calloc(5, sizeof(char));
-	char* num1 = (char*)calloc(13, sizeof(char));
-	char* num2 = (char*)calloc(13, sizeof(char));
-	char* time_rcv = (char*)calloc(4, sizeof(char));
-	char* times = (char*)calloc(9, sizeof(char));
-	char* out = (char*)calloc(34, sizeof(char));
-
-	recv(cs, buffer, 4, 0);
-	buffer[4] = '\0';
-	recv(cs, num1, 12, 0);
-	num1[12] = '\0';
-	recv(cs, num2, 12, 0);
-	num2[12] = '\0';
-	recv(cs, time_rcv, 3, 0);
-	time_rcv[3] = '\0';
-	times[0] = (int)time_rcv[0] / 10 + '0';
-	times[1] = (int)time_rcv[0] % 10 + '0';
-	times[2] = ':';
-	times[3] = (int)time_rcv[1] / 10 + '0';
-	times[4] = (int)time_rcv[1] % 10 + '0';
-	times[5] = ':';
-	times[6] = (int)time_rcv[2] / 10 + '0';
-	times[7] = (int)time_rcv[2] % 10 + '0';
-	times[8] = '\0';
-
-	strcat(out, num1);
-	out[12] = ' ';
-	strcat(out, num2);
-	out[25] = ' ';
-	strcat(out, times);
-
-	if (strcmp(out, times) == 0)
-	{
-		return NULL;
-	}
-	else
-	{
-		return out;
-	}
-}
-
-short recv_string(int cs)
-{
-	FILE* file = fopen("msg.txt", "a");
-	if (!file) {
-		cout << "Could't open file!" << endl;
-		exit(1);
-	}
-	short flag = 1;
-	char put[4] = "\0";
-	int m = 0;
-	char nm = recv(cs, put, 3, 0);
-	if (nm >= 0) do
-		{
-			unsigned int m_num;
-			char hh;
-			char mm;
-			char ss;
-			char hh2;
-			char mm2;
-			char ss2;
-			unsigned int BBB = 0;
-			char message[500000] = { '\0' };
-
-			m = recv(cs, (char*)&m_num, 4, 0);
-			m_num = ntohl(m_num);
-			m += recv(cs, &hh, 1, 0);
-			m += recv(cs, &mm, 1, 0);
-			m += recv(cs, &ss, 1, 0);
-			m += recv(cs, &hh2, 1, 0);
-			m += recv(cs, &mm2, 1, 0);
-			m += recv(cs, &ss2, 1, 0);
-			m += recv(cs, (char*)&BBB, 4, 0);
-			BBB = ntohl(BBB);
-
-			int rcv = recv(cs, message, 1, 0);
-			while (message[rcv - 1] != '\0' && message[rcv - 1] != '\n' && rcv < 500000)
-			{
-				rcv += recv(cs, message + rcv, 1, 0);
-				if (rcv <= 0) {
-					fclose(file);
-					return flag;
-				}
-			}
-			if (message[rcv - 1] != '\n') message[rcv - 1] = '\n';
-			message[rcv] = '\0';
-
-			flag = strcmp(message, "stop\n") && strcmp(message, "stop\0") && strcmp(message, "stop");
-
-			fprintf(file, "%d.%d.%d.%d:%d %d:%d:%d %d:%d:%d %u %s", (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, (ip) & 0xFF, port, hh, mm, ss, hh2, mm2, ss2, BBB, message);
-
-			send(cs, "ok", 2, 0);
-
-		} while (m >= 0);
-
-	fclose(file);
-	return flag;
-}
+struct client {
+	int cs;
+	int ip;
+	int port;
+	char putget;
+};
 
 int main(int argc, char* argv[])
 {
-	if (argc != 2){
+	/*if (argc != 2){
 		cout << "Wrong arguments!";
 		return 0;
-	}
+	}*/
 
-	port = atoi(argv[1]);
-	cout << "Listening TCP port: " << port << "..." << endl;
+	//unsigned port_s = atoi(argv[1]);
+	unsigned int port_s = 9000;
+	cout << "Listening TCP port: " << port_s << "..." << endl;
 
 	int s;
 	struct sockaddr_in addr;
@@ -205,41 +109,232 @@ int main(int argc, char* argv[])
 	init();
 
 	s = socket(AF_INET, SOCK_STREAM, 0);
-	if (s < 0) return sock_err("socket", s);
+	if (s < 0)
+		return sock_err("socket", s);
+
+	set_non_block_mode(s);
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
-	addr.sin_port = htons(port);
+	addr.sin_port = htons(port_s);
 	addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	if (bind(s, (struct sockaddr*)&addr, sizeof(addr)) < 0) return sock_err("bind", s);
+
+	if (bind(s, (struct sockaddr*)&addr, sizeof(addr)) < 0)
+		return sock_err("bind", s);
+
+	if (listen(s, 1) < 0)
+		return sock_err("listen", s);
+
+	struct pollfd pfd[MAX_CLI + 1];
+	pfd[MAX_CLI].fd = s; //прослущивающий порт
+	pfd[MAX_CLI].events = POLLIN;
+
+	client clnt[MAX_CLI]; //"база данных" о клиентах и ее заполнение
+	for (int i = 0; i < MAX_CLI; i++)
+	{
+		pfd[i].fd = clnt[i].cs;
+		pfd[i].events = POLLIN | POLLOUT;
+	}
 
 	if (listen(s, 1) < 0) return sock_err("listen", s);
 
+	int CLI = -1; //число активных клиентов-1 (по совместительству индекс)
+	while (1) {
 
-	do {
-		int addrlen = sizeof(addr);
-		int cs = accept(s, (struct sockaddr*)&addr, &addrlen);
-		int len;
-		if (cs < 0){
-			sock_err("accept", s);
-			cout << "Error" << endl;
-			break;
+#ifdef _WIN32
+		int ev_cnt = WSAPoll(pfd, sizeof(pfd) / sizeof(pfd[0]), MAX_CLI);
+		Sleep(1);
+		//cout << ev_cnt << endl;
+#else
+		int ev_cnt = poll(pfd, sizeof(pfd) / sizeof(pfd[0]), MAX_CLI)
+#endif
+
+			if (ev_cnt > 0) {
+				if (CLI != -1) for (int i = 0; i <= CLI; i++) {
+					if (pfd[i].revents & POLLHUP)
+					{
+						// Сокет cs[i] - клиент отключился. Можно закрывать сокет
+						printf("Client disconnected: %d.%d.%d.%d:%d\n\n", (clnt[i].ip >> 24) & 0xFF, (clnt[i].ip >> 16) & 0xFF, (clnt[i].ip >> 8) & 0xFF, (clnt[i].ip) & 0xFF, clnt[i].port);
+						s_close(clnt[i].cs); //Для закрытия сокета также необходимо чистить информацию о нем, чтобы программа не пыталась работать с "мертвыми" клиентами
+						for (int j = i; j < CLI - 1; j++) {
+							clnt[j] = clnt[j + 1];
+							pfd[j] = pfd[j + 1];
+						}
+						clnt[CLI - 1] = { 0,0,0,0 };
+						pfd[CLI - 1] = { 0,0,0 };
+						CLI--;
+					}
+					if (pfd[i].revents & POLLERR)
+					{
+						// Сокет cs[i] - возникла ошибка. Можно закрывать сокет
+						printf("Error! Client disconnected: %d.%d.%d.%d:%d\n\n", (clnt[i].ip >> 24) & 0xFF, (clnt[i].ip >> 16) & 0xFF, (clnt[i].ip >> 8) & 0xFF, (clnt[i].ip) & 0xFF, clnt[i].port);
+						s_close(clnt[i].cs);
+						for (int j = i; j < CLI - 1; j++) {
+							clnt[j] = clnt[j + 1];
+							pfd[j] = pfd[j + 1];
+						}
+						clnt[CLI - 1] = { 0,0,0,0 };
+						pfd[CLI - 1] = { 0,0,0 };
+						CLI--;
+					}
+					if ((pfd[i].revents & POLLIN) && clnt[i].putget == 1) //работа с клиентами, отправляющими сообщения
+					{
+						// Сокет cs[i] доступен на чтение, можно вызывать recv/recvfrom
+						//Считываем отправленные клиентом сообщения. Считывание происходит по 1 сообщению за раз, чтобы другие клиенты тоже могли пользоваться сервером
+						//Открытие и закрытие файлов происходит в рамках одного сообщения для того, чтобы не произошло ошибок в работе с ними
+						FILE* file = fopen("msg.txt", "a"), * nums = fopen("nums.txt", "a");
+						if (!file || !nums) {
+							cout << "Could't open file!" << endl;
+							return 0;
+						}
+
+						bool flag = 1;
+						int m = 0;
+
+						unsigned int m_num = 0;
+						char hh;
+						char mm;
+						char ss;
+						char hh2;
+						char mm2;
+						char ss2;
+						unsigned int BBB = 0;
+						char message[350000] = "";
+
+						m = recv(clnt[i].cs, (char*)&m_num, 4, 0);
+						m_num = ntohl(m_num);
+						m += recv(clnt[i].cs, &hh, 1, 0);
+						m += recv(clnt[i].cs, &mm, 1, 0);
+						m += recv(clnt[i].cs, &ss, 1, 0);
+						m += recv(clnt[i].cs, &hh2, 1, 0);
+						m += recv(clnt[i].cs, &mm2, 1, 0);
+						m += recv(clnt[i].cs, &ss2, 1, 0);
+						m += recv(clnt[i].cs, (char*)&BBB, 4, 0);
+						BBB = ntohl(BBB);
+
+						int rcv = recv(clnt[i].cs, message, 1, 0);
+						while (message[rcv - 1] != '\0' && message[rcv - 1] != '\n')
+						{
+							rcv += recv(clnt[i].cs, message + rcv, 1, 0);
+							if (rcv <= 0) {
+								s_close(clnt[i].cs);
+								for (int j = i; j < CLI - 1; j++) {
+									clnt[j] = clnt[j + 1];
+									pfd[j] = pfd[j + 1];
+								}
+								clnt[CLI - 1] = { 0,0,0,0 };
+								pfd[CLI - 1] = { 0,0,0 };
+								CLI--;
+								fclose(file);
+								fclose(nums);
+							}
+						}
+
+						flag = strcmp(message, "stop\n") && strcmp(message, "stop\0") && strcmp(message, "stop");
+
+						fprintf(file, "%d.%d.%d.%d:%d %02d:%02d:%02d %02d:%02d:%02d %u %s\n", (clnt[i].ip >> 24) & 0xFF,
+							(clnt[i].ip >> 16) & 0xFF, (clnt[i].ip >> 8) & 0xFF, (clnt[i].ip) & 0xFF, clnt[i].port, hh, mm, ss, hh2, mm2, ss2, BBB, message);
+						fprintf(nums, "%u\n", m_num);
+
+						send(clnt[i].cs, "ok", 2, 0);
+						fclose(file);
+						fclose(nums);
+
+						if (!flag) {
+							printf("'stop' message was reveived. Stopping the server...\n");
+							for (int j = 0; j < CLI; j++)
+								s_close(clnt[j].cs);
+							return 0;
+						}
+
+					}
+					if ((pfd[i].revents & POLLOUT) && clnt[i].putget == -1) //работа с клиентами, ждущими сообщения. На самом деле и те, и другие клиенты могут как принимать, так и отправлять сообщения,
+						//поэтому деление на POLLIN и POLLOUT происходит лишь формально
+					{
+						// Сокет cs[i] доступен на запись, можно вызывать send/sendto
+						//В отличие от PUT клиентов чтение из файла происходит сразу для всех сообщений в файле, чтобы передать их разом, а не бесконечно принимать и отправлять по одному сообщению от разных клиентов
+						FILE* nums = fopen("nums.txt", "r"), * file = fopen("msg.txt", "r");
+						if (!file || !nums) {
+							cout << "Could't open file!" << endl;
+							return 0;
+						}
+						do {
+							char line[350000] = "";
+							if (feof(file)) break;
+							fgets(line, 350000, file);
+							if (strlen(line) < 20) continue;
+
+							char* address = strtok(line, " ");
+							char* time = strtok(NULL, " ");
+							char* time2 = strtok(NULL, " ");
+							char* BBB_str = strtok(NULL, " ");
+							unsigned int BBB = atoll(BBB_str);
+							char* message = strtok(NULL, "\n");
+
+							char hh = atoi(strtok(time, ":"));
+							char mm = atoi(strtok(NULL, ":"));
+							char ss = atoi(strtok(NULL, ":"));
+							char hh2 = atoi(strtok(time2, ":"));
+							char mm2 = atoi(strtok(NULL, ":"));
+							char ss2 = atoi(strtok(NULL, ":"));
+							char numm[11] = "";
+							fgets(numm, 11, nums);
+							int num = htonl(atoi(numm));
+
+							BBB = htonl(BBB);
+							send(clnt[i].cs, (char*)&num, 4, 0);
+							send(clnt[i].cs, &hh, 1, 0);
+							send(clnt[i].cs, &mm, 1, 0);
+							send(clnt[i].cs, &ss, 1, 0);
+							send(clnt[i].cs, &hh2, 1, 0);
+							send(clnt[i].cs, &mm2, 1, 0);
+							send(clnt[i].cs, &ss2, 1, 0);
+							send(clnt[i].cs, (char*)&BBB, 4, 0);
+							send(clnt[i].cs, message, strlen(message) + 1, 0);
+						} while (!feof(file) && !feof(nums));
+
+						clnt[i].putget = 0;
+						printf("File sent\n");
+						s_close(clnt[i].cs);
+						for (int j = i; j < CLI - 1; j++) {
+							clnt[j] = clnt[j + 1];
+							pfd[j] = pfd[j + 1];
+						}
+						clnt[CLI - 1] = { 0,0,0,0 };
+						pfd[CLI - 1] = { 0,0,0 };
+						CLI--;
+
+						fclose(file);
+						fclose(nums);
+					}
+				}
+			}
+		if (pfd[MAX_CLI].revents & POLLIN)
+		{
+			// Сокет ls доступен на чтение - можно вызывать accept, принимать
+			// новое подключение. Новый сокет следует добавить в cs и создать для
+			// него структуру в pfd.
+
+			//Добавляем новые сокеты в нашу "базу данных"
+			int addrlen = sizeof(addr);
+			int cs_n = accept(s, (struct sockaddr*)&addr, &addrlen);
+			//set_non_block_mode(cs_n);
+			unsigned int ip_n = ntohl(addr.sin_addr.s_addr);
+			unsigned int port_n = ntohs(addr.sin_port);
+			printf("Client connected: %d.%d.%d.%d:%d\n", (ip_n >> 24) & 0xFF, (ip_n >> 16) & 0xFF, (ip_n >> 8) & 0xFF, (ip_n) & 0xFF, port_n);
+
+			char req[4] = "";
+			char nm = recv(cs_n, req, 3, 0);
+			bool flag = 1;
+			if (!strcmp(req, "put") || !strcmp(req, "get")) {
+				clnt[++CLI].cs = cs_n;
+				pfd[CLI].fd = cs_n;
+				clnt[CLI].ip = ip_n;
+				clnt[CLI].port = port_n;
+				if (!strcmp(req, "put")) clnt[CLI].putget = 1; //в "БД" создается пометка о том, какого рода это клиент
+				if (!strcmp(req, "get")) clnt[CLI].putget = -1;
+			}
 		}
-
-		ip = ntohl(addr.sin_addr.s_addr);
-		printf("Client connected: %d.%d.%d.%d\n", (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, (ip) & 0xFF);
-
-		short flag = recv_string(cs);
-
-		printf("Client disconnected: %d.%d.%d.%d\n\n", (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, (ip) & 0xFF);
-		s_close(cs);
-		
-		if (!flag) {
-			cout << "Message \"stop\" has been received. Stopping the server." << endl;
-			return 0;
-		}
-	} while (1);
-
-	return 0;
+	}
 }

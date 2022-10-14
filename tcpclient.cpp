@@ -98,59 +98,58 @@ bool check_B(unsigned int B, char* B_str){
 	return (B_str[0] != '-' && !strcmp(b, B_str));
 }
 
-int send_file(FILE* file, int s){	
-	char* line;
-	unsigned int m_num = 0, rcvline = 0;
-	while (1){
-		unsigned long long mes_leng = 0;
-		char c;
-		while(1) {
-			c = fgetc(file);
-			if (c != '\n' && c != EOF) mes_leng++;
-			else break;
+bool chkk(char* c){
+	return (c[2] == ':' && c[5] == ':');
+}
+
+bool send_file(FILE* file, int s){	
+	char line[350000] = "";
+	int m_num = -1, rcvline = -1;
+	do {
+		if(feof(file)) break;
+		fgets(line, 350000, file);
+		if (strlen(line) < 20) continue;
+		
+		line[350000] = '\0';
+		
+		char* time = strtok(line, " ");
+		char* time2 = strtok(NULL, " ");
+		char* BBB_str = strtok(NULL, " ");
+		unsigned int BBB = atoll(BBB_str);
+		char* message = strtok(NULL, "\n");
+		
+		if (!(chkk(time) && chkk(time2))) continue;
+		m_num++;
+		
+		char hh = atoi(strtok(time, ":"));
+		char mm = atoi(strtok(NULL, ":"));
+		char ss = atoi(strtok(NULL, ":"));
+		char hh2 = atoi(strtok(time2, ":"));
+		char mm2 = atoi(strtok(NULL, ":"));
+		char ss2 = atoi(strtok(NULL, ":"));
+		unsigned int m_num_h = htonl(m_num);
+		
+		if (!(check_h(hh) && check_m_s(mm) && check_m_s(ss) && check_h(hh2) && check_m_s(mm2) && check_m_s(ss2)&& check_B(BBB, BBB_str))){
+			rcvline++;
+			continue;
 		}
-		if (mes_leng > 0){
-			fseek(file, -mes_leng - 1, SEEK_CUR);
-			line = (char*)calloc(mes_leng + 1, sizeof(char));
-			fgets(line, mes_leng + 1, file);
-        
-			char* time = strtok(line, " ");
-			char* time2 = strtok(NULL, " ");
-			char* BBB_str = strtok(NULL, " ");
-			unsigned int BBB = atoll(BBB_str);
-			char* message = strtok(NULL, " ");
-			*(message + strlen(message)) = '\n';
-			
-			char hh = atoi(strtok(time, ":"));
-			char mm = atoi(strtok(NULL, ":"));
-			char ss = atoi(strtok(NULL, ":"));
-			char hh2 = atoi(strtok(time2, ":"));
-			char mm2 = atoi(strtok(NULL, ":"));
-			char ss2 = atoi(strtok(NULL, ":"));
-			unsigned int m_num_h = htonl(m_num);
-			
-			if (!(check_h(hh) && check_m_s(mm) && check_m_s(ss) && check_h(hh2) && check_m_s(mm2) && check_m_s(ss2)&& check_B(BBB, BBB_str))) continue;
-			
-			BBB = htonl(BBB);
-			send(s, &m_num_h, 4, MSG_NOSIGNAL);
-			send(s, &hh, 1, MSG_NOSIGNAL);
-			send(s, &mm, 1, MSG_NOSIGNAL);
-			send(s, &ss, 1, MSG_NOSIGNAL);
-			send(s, &hh2, 1, MSG_NOSIGNAL);
-			send(s, &mm2, 1, MSG_NOSIGNAL);
-			send(s, &ss2, 1, MSG_NOSIGNAL);
-			send(s, &BBB, 4, MSG_NOSIGNAL);
-			send(s, message, strlen(message), MSG_NOSIGNAL);
-			
-			m_num++;
-			
-			char* buffer;
-			int res = recv(s, buffer, 2, 0);
-			if(res > 0 && buffer[0] == 'o' && buffer[1] == 'k') rcvline++;
-		}
-        
-        if (c == EOF) break;
-	}
+		
+		BBB = htonl(BBB);
+		int m = send(s, &m_num_h, 4, MSG_NOSIGNAL);
+		send(s, &hh, 1, MSG_NOSIGNAL);
+		send(s, &mm, 1, MSG_NOSIGNAL);
+		send(s, &ss, 1, MSG_NOSIGNAL);
+		send(s, &hh2, 1, MSG_NOSIGNAL);
+		send(s, &mm2, 1, MSG_NOSIGNAL);
+		send(s, &ss2, 1, MSG_NOSIGNAL);
+		send(s, &BBB, 4, MSG_NOSIGNAL);
+		send(s, message, strlen(message) + 1, MSG_NOSIGNAL);
+		
+		char buffer[2] = "";
+		int res = recv(s, buffer, 2, 0);
+		if(res > 0 && buffer[0] == 'o' && buffer[1] == 'k') rcvline++;
+	} while (!feof(file));
+	
 	return (m_num == rcvline);
 }
 
@@ -166,19 +165,9 @@ int main(int argc, char* argv[])
 
 	init();
 
-	char* ip = (char*)calloc(16,sizeof(char));
-	char* port = (char*)calloc(16,sizeof(char));
-	char* tmp = (char*)calloc(32,sizeof(char));
-	char* filename = (char*)calloc(64, sizeof(char));
-
-	for (int i = strlen((char*)argv[1]); i>=0; --i)
-		tmp[strlen((char*)argv[1])-i-1] = argv[1][i];
-
-	ip = strtok((char*)argv[1], ":");
-	strtok(tmp,":");
- 
-	for (int i = strlen(tmp); i>=0; --i)
-		port[strlen(tmp)-i-1] = tmp[i];
+	char* ip = strtok(argv[1], ":");
+	char* port = strtok(NULL, " ");
+	char filename[40] = "";
 	strcpy(filename,argv[2]);
 
 	FILE* file = fopen(filename, "r");
@@ -215,7 +204,7 @@ int main(int argc, char* argv[])
 
 	send(s, "put", 3, 0);
 
-	if (send_file(file, s)) cout << "Data has been sent correctly." << endl;
+	if (send_file(file, s)) cout << "Data has been sent." << endl;
 	else cout << "Data has not been sent. Something went wrong." << endl;
     
 	fclose(file);
